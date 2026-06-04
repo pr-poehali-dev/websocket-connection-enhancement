@@ -1,0 +1,46 @@
+{
+  "tests": [
+    {
+      "name": "OPTIONS CORS preflight",
+      "method": "OPTIONS",
+      "path": "/",
+      "expectedStatus": 200
+    },
+    {
+      "name": "connect — invalid host returns 502",
+      "method": "POST",
+      "path": "/",
+      "body": {"action": "connect", "host": "nonexistent.invalid", "port": 9999},
+      "expectedStatus": 502,
+      "expectedBody": {"error": "string"},
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "send — unknown session returns 404",
+      "method": "POST",
+      "path": "/",
+      "body": {"action": "send", "session_id": "no-such-session", "commands": ["PING :test"]},
+      "expectedStatus": 404,
+      "expectedBody": {"error": "string"},
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "poll — unknown session returns 404",
+      "method": "POST",
+      "path": "/",
+      "body": {"action": "poll", "session_id": "no-such-session"},
+      "expectedStatus": 404,
+      "expectedBody": {"error": "string"},
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "disconnect — unknown session ok",
+      "method": "POST",
+      "path": "/",
+      "body": {"action": "disconnect", "session_id": "no-such-session"},
+      "expectedStatus": 200,
+      "expectedBody": {"disconnected": true},
+      "bodyMatcher": "partial"
+    }
+  ]
+}

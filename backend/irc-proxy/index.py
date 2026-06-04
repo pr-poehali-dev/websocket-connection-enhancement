@@ -160,6 +160,48 @@ def _ws_recv_frames(sock: ssl.SSLSocket, buf: bytearray, deadline: float) -> tup
     return lines, buf
 
 
+# ── Probe helper ─────────────────────────────────────────────────────────────
+
+def _try_ws_path(host: str, port: int, path: str, extra_headers: str = "", use_ssl: bool = True) -> str:
+    """Пробует WS handshake на указанном пути. Возвращает статус ответа."""
+    try:
+        raw_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        raw_sock.settimeout(5)
+        raw_sock.connect((host, port))
+        if use_ssl:
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+            sock = ctx.wrap_socket(raw_sock, server_hostname=host)
+        else:
+            sock = raw_sock
+        key = _ws_key()
+        handshake = (
+            f"GET {path} HTTP/1.1\r\n"
+            f"Host: {host}\r\n"
+            f"Upgrade: websocket\r\n"
+            f"Connection: Upgrade\r\n"
+            f"Sec-WebSocket-Key: {key}\r\n"
+            f"Sec-WebSocket-Version: 13\r\n"
+            f"Origin: https://{host}\r\n"
+            + extra_headers +
+            f"\r\n"
+        )
+        sock.sendall(handshake.encode())
+        response = b""
+        sock.settimeout(3)
+        while b"\r\n\r\n" not in response:
+            chunk = sock.recv(4096)
+            if not chunk:
+                break
+            response += chunk
+        sock.close()
+        first_line = response.decode(errors="replace").split("\r\n")[0]
+        return first_line
+    except Exception as e:
+        return f"ERROR: {e}"
+
+
 # ── Session helpers ───────────────────────────────────────────────────────────
 
 def _get_session(session_id: str):
@@ -312,6 +354,40 @@ def handler(event: dict, context) -> dict:
             "statusCode": 200,
             "headers": CORS_HEADERS,
             "body": json.dumps({"disconnected": True}),
+        }
+
+    # ── probe ─────────────────────────────────────────────────────────────────
+    if action == "probe":
+        host = body.get("host", "galaxy.mobstudio.ru")
+        port = int(body.get("port", 443))
+        # Пробуем разные комбинации путей и заголовков
+        variants = [
+            ("/", "", True),
+            ("/web/", "", True),
+            ("/web/", "Sec-WebSocket-Protocol: irc\r\n", True),
+            ("/web/", "Sec-WebSocket-Protocol: irc.mobstudio\r\n", True),
+            ("/websocket/", "", True),
+            ("/ws/", "", True),
+            ("/irc/", "", True),
+            ("/", "Sec-WebSocket-Protocol: irc\r\n", True),
+        ]
+        # Также пробуем порт 6697 (IRC SSL) без SSL-сокета
+        port6697_variants = [
+            ("/", "", False),
+            ("/", "Sec-WebSocket-Protocol: irc\r\n", False),
+        ]
+        results = {}
+        for path, extra, use_ssl in variants:
+            key = f"443 {path} proto={bool(extra)}"
+            results[key] = _try_ws_path(host, port, path, extra, use_ssl)
+        for path, extra, use_ssl in port6697_variants:
+            key = f"6697 {path} ssl=False"
+            results[key] = _try_ws_path(host, 6697, path, extra, use_ssl)
+        winner = next((k for k, r in results.items() if "101" in r), None)
+        return {
+            "statusCode": 200,
+            "headers": CORS_HEADERS,
+            "body": json.dumps({"results": results, "winner": winner}),
         }
 
     return {

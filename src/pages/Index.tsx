@@ -23,7 +23,7 @@ interface Settings {
 
 const DEFAULT_SETTINGS: Settings = {
   server: "galaxy.mobstudio.ru",
-  port: "6667",
+  port: "443",
   nick: "GALA",
   ident: "352",
 };

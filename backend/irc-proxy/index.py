@@ -6,6 +6,7 @@ IRC Proxy — принимает команды от браузера и пер�
 
 import json
 import socket
+import ssl
 import threading
 import time
 import uuid
@@ -59,13 +60,21 @@ def handler(event: dict, context) -> dict:
     # ── connect ──────────────────────────────────────────────────────────────
     if action == "connect":
         host = body.get("host", "galaxy.mobstudio.ru")
-        port = int(body.get("port", 6667))
+        port = int(body.get("port", 443))
+        use_ssl = body.get("ssl", port == 443)
         session_id = str(uuid.uuid4())
 
         try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(10)
-            sock.connect((host, port))
+            raw_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            raw_sock.settimeout(10)
+            raw_sock.connect((host, port))
+            if use_ssl:
+                ctx = ssl.create_default_context()
+                ctx.check_hostname = False
+                ctx.verify_mode = ssl.CERT_NONE
+                sock = ctx.wrap_socket(raw_sock, server_hostname=host)
+            else:
+                sock = raw_sock
             sock.settimeout(0.5)
         except Exception as e:
             return {

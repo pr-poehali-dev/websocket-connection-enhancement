@@ -22,8 +22,8 @@ interface Settings {
 }
 
 const DEFAULT_SETTINGS: Settings = {
-  server: "galaxy.mobstudio.ru",
-  port: "443",
+  server: "cs.mobstudio.ru",
+  port: "6672",
   nick: "GALA",
   ident: "352",
 };
@@ -156,7 +156,7 @@ export default function Index() {
     addMessage(`--- Подключение к ${settings.server}:${settings.port} ---`, "system");
 
     try {
-      const data = await proxyCall({ action: "connect", host: settings.server, port: parseInt(settings.port), path: "/web/" });
+      const data = await proxyCall({ action: "connect", host: settings.server, port: parseInt(settings.port), path: "/", origin: "https://galaxy.mobstudio.ru" });
       if (data.error) {
         setStatus("error");
         addMessage(`⚠ ${data.error}`, "error");

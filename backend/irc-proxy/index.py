@@ -37,8 +37,9 @@ def _ws_accept(key: str) -> str:
     return base64.b64encode(hashlib.sha1((key + magic).encode()).digest()).decode()
 
 
-def _ws_handshake(sock: ssl.SSLSocket, host: str, path: str = "/") -> None:
+def _ws_handshake(sock, host: str, path: str = "/", origin: str = "") -> None:
     key = _ws_key()
+    origin_header = origin or f"https://galaxy.mobstudio.ru"
     handshake = (
         f"GET {path} HTTP/1.1\r\n"
         f"Host: {host}\r\n"
@@ -46,7 +47,11 @@ def _ws_handshake(sock: ssl.SSLSocket, host: str, path: str = "/") -> None:
         f"Connection: Upgrade\r\n"
         f"Sec-WebSocket-Key: {key}\r\n"
         f"Sec-WebSocket-Version: 13\r\n"
-        f"Origin: https://{host}\r\n"
+        f"Sec-WebSocket-Extensions: permessage-deflate; client_max_window_bits\r\n"
+        f"Origin: {origin_header}\r\n"
+        f"User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36\r\n"
+        f"Cache-Control: no-cache\r\n"
+        f"Pragma: no-cache\r\n"
         f"\r\n"
     )
     sock.sendall(handshake.encode())
@@ -243,9 +248,11 @@ def handler(event: dict, context) -> dict:
 
     # ── connect ───────────────────────────────────────────────────────────────
     if action == "connect":
-        host = body.get("host", "galaxy.mobstudio.ru")
-        port = int(body.get("port", 443))
+        host = body.get("host", "cs.mobstudio.ru")
+        port = int(body.get("port", 6672))
         path = body.get("path", "/")
+        use_ssl = body.get("ssl", port == 443)
+        origin = body.get("origin", "https://galaxy.mobstudio.ru")
         session_id = str(uuid.uuid4())
 
         try:
@@ -253,12 +260,15 @@ def handler(event: dict, context) -> dict:
             raw_sock.settimeout(10)
             raw_sock.connect((host, port))
 
-            ctx = ssl.create_default_context()
-            ctx.check_hostname = False
-            ctx.verify_mode = ssl.CERT_NONE
-            sock = ctx.wrap_socket(raw_sock, server_hostname=host)
+            if use_ssl:
+                ctx = ssl.create_default_context()
+                ctx.check_hostname = False
+                ctx.verify_mode = ssl.CERT_NONE
+                sock = ctx.wrap_socket(raw_sock, server_hostname=host)
+            else:
+                sock = raw_sock
 
-            _ws_handshake(sock, host, path)
+            _ws_handshake(sock, host, path, origin)
             sock.settimeout(0.5)
         except Exception as e:
             return {

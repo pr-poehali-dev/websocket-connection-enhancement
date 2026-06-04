@@ -156,7 +156,7 @@ export default function Index() {
     addMessage(`--- Подключение к ${settings.server}:${settings.port} ---`, "system");
 
     try {
-      const data = await proxyCall({ action: "connect", host: settings.server, port: parseInt(settings.port), path: "/web" });
+      const data = await proxyCall({ action: "connect", host: settings.server, port: parseInt(settings.port), path: "/web/" });
       if (data.error) {
         setStatus("error");
         addMessage(`⚠ ${data.error}`, "error");
